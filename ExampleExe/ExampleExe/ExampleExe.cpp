@@ -1,147 +1,95 @@
-// The example below is take from the libxlsxwriter/examples directory. The
-// code can be replaced with code from any of the other example programs in
-// thatdirectory. The lib linkage is done via the stdafx.h file.
-
-/*
- * An example of creating Excel column charts using the libxlsxwriter library.
- *
- * Copyright 2014-2016, John McNamara, jmcnamara@cpan.org
- *
- */
+#include <iostream>
+#include <fstream>
+#include <sstream> 
+#include <vector>
+#include <iterator>
+#include <algorithm>
+#include <time.h> 
 
 #include "xlsxwriter.h"
 
-/*
- * Write some data to the worksheet.
- */
-void write_worksheet_data(lxw_worksheet *worksheet, lxw_format *bold) {
+using namespace std;
+using std::cout;
+using std::endl;
 
-    int row, col;
-    uint8_t data[6][3] = {
-        /* Three columns of data. */
-        {2, 10, 30},
-        {3, 40, 60},
-        {4, 50, 70},
-        {5, 20, 50},
-        {6, 10, 40},
-        {7, 50, 30}
-    };
+int getFileSize(const std::string &fileName) {
+	ifstream file(fileName.c_str(), ifstream::in | ifstream::binary);
 
-    worksheet_write_string(worksheet, CELL("A1"), "Number",  bold);
-    worksheet_write_string(worksheet, CELL("B1"), "Batch 1", bold);
-    worksheet_write_string(worksheet, CELL("C1"), "Batch 2", bold);
+	if (!file.is_open()) {
+		return -1;
+	}
 
-    for (row = 0; row < 6; row++)
-        for (col = 0; col < 3; col++)
-            worksheet_write_number(worksheet, row + 1, col, data[row][col] , NULL);
+	file.seekg(0, ios::end);
+	int fileSize = file.tellg();
+	file.close();
+
+	return fileSize;
 }
 
-/*
- * Create a worksheet with examples charts.
- */
-int main() {
+int main(int argc, char* argv[]) {
 
-    lxw_workbook     *workbook  = new_workbook("chart_column.xlsx");
-    lxw_worksheet    *worksheet = workbook_add_worksheet(workbook, NULL);
-    lxw_chart_series *series;
+	//file
+	const std::string csvFilePath =  argv[1];
+	std::ifstream file(csvFilePath);
+	if (!file) {
+		return -1;
+	}
 
-    /* Add a bold format to use to highlight the header cells. */
-    lxw_format *bold = workbook_add_format(workbook);
-    format_set_bold(bold);
+	//excel
+	const std::string excelFilePath = csvFilePath.substr(0, csvFilePath.find_last_of('.')) + ".xlsx";
+	lxw_workbook  *workbook = new_workbook(excelFilePath.c_str());
+	lxw_worksheet *worksheet = workbook_add_worksheet(workbook, "Sheet1");
+	lxw_format *bold = workbook_add_format(workbook);
+	format_set_bold(bold);
 
-    /* Write some data for the chart. */
-    write_worksheet_data(worksheet, bold);
+	//timer
+	time_t start, end;
+	time(&start);
 
+	//import
+	std::size_t row = 0;
+	std::string line;
+	while (std::getline(file, line)) {
 
-    /*
-     * Create a column chart.
-     */
-    lxw_chart *chart = workbook_add_chart(workbook, LXW_CHART_COLUMN);
+		if (line.length() == 0)
+			continue;
 
-    /* Add the first series to the chart. */
-    series = chart_add_series(chart, "=Sheet1!$A$2:$A$7", "=Sheet1!$B$2:$B$7");
+		std::string value;
+		std::istringstream stream(line);
+		std::size_t column = 0;
 
-    /* Set the name for the series instead of the default "Series 1". */
-    chart_series_set_name(series, "=Sheet1!$B1$1");
+		while (std::getline(stream, value, ';')) {
 
-    /* Add a second series but leave the categories and values undefined. They
-     * can be defined later using the alternative syntax shown below.  */
-    series = chart_add_series(chart, NULL, NULL);
+			if (value.size() > 0) {
 
-    /* Configure the series using a syntax that is easier to define programmatically. */
-    chart_series_set_categories(series, "Sheet1", 1, 0, 6, 0); /* "=Sheet1!$A$2:$A$7" */
-    chart_series_set_values(series,     "Sheet1", 1, 2, 6, 2); /* "=Sheet1!$C$2:$C$7" */
-    chart_series_set_name_range(series, "Sheet1", 0, 2);       /* "=Sheet1!$C$1"      */
+				if (value.find_first_of("'") == 0)
+					value.erase(0, 1);
 
-    /* Add a chart title and some axis labels. */
-    chart_title_set_name(chart,        "Results of sample analysis");
-    chart_axis_set_name(chart->x_axis, "Test number");
-    chart_axis_set_name(chart->y_axis, "Sample length (mm)");
+				if (value.find_last_of("'") == value.size() - 1)
+					value.erase(value.size() - 1, 1);
+			}
 
-    /* Set an Excel chart style. */
-    chart_set_style(chart, 11);
+			worksheet_write_string(worksheet, row, column, value.c_str(), (row == 0 ? bold : NULL));
 
-    /* Insert the chart into the worksheet. */
-    worksheet_insert_chart(worksheet, CELL("E2"), chart);
+			column++;
+		}
 
+		row++;
+	}
 
-    /*
-     * Create a stacked column chart.
-     */
-    chart = workbook_add_chart(workbook, LXW_CHART_COLUMN_STACKED);
+	//clean
+	file.close();
+	workbook_close(workbook);
+	time(&end);
 
-    /* Add the first series to the chart. */
-    series = chart_add_series(chart, "=Sheet1!$A$2:$A$7", "=Sheet1!$B$2:$B$7");
+	//log
+	std::ofstream log;
+	const std::string logFilePath = csvFilePath.substr(0, csvFilePath.find_last_of('.')) + ".log";
+	log.open(logFilePath);
+	log << "Input file: " << csvFilePath << endl;
+	log << "Output size: " << getFileSize(excelFilePath) << " bytes" << endl;
+	log << "Elapsed time: " << difftime(end, start) << " seconds" << endl;
+	log.close();
 
-    /* Set the name for the series instead of the default "Series 1". */
-    chart_series_set_name(series, "=Sheet1!$B1$1");
-
-    /* Add the second series to the chart. */
-    series = chart_add_series(chart, "=Sheet1!$A$2:$A$7", "=Sheet1!$C$2:$C$7");
-
-    /* Set the name for the series instead of the default "Series 2". */
-    chart_series_set_name(series, "=Sheet1!$C1$1");
-
-    /* Add a chart title and some axis labels. */
-    chart_title_set_name(chart,        "Results of sample analysis");
-    chart_axis_set_name(chart->x_axis, "Test number");
-    chart_axis_set_name(chart->y_axis, "Sample length (mm)");
-
-    /* Set an Excel chart style. */
-    chart_set_style(chart, 12);
-
-    /* Insert the chart into the worksheet. */
-    worksheet_insert_chart(worksheet, CELL("E18"), chart);
-
-
-    /*
-     * Create a percent stacked column chart.
-     */
-    chart = workbook_add_chart(workbook, LXW_CHART_COLUMN_STACKED_PERCENT);
-
-    /* Add the first series to the chart. */
-    series = chart_add_series(chart, "=Sheet1!$A$2:$A$7", "=Sheet1!$B$2:$B$7");
-
-    /* Set the name for the series instead of the default "Series 1". */
-    chart_series_set_name(series, "=Sheet1!$B1$1");
-
-    /* Add the second series to the chart. */
-    series = chart_add_series(chart, "=Sheet1!$A$2:$A$7", "=Sheet1!$C$2:$C$7");
-
-    /* Set the name for the series instead of the default "Series 2". */
-    chart_series_set_name(series, "=Sheet1!$C1$1");
-
-    /* Add a chart title and some axis labels. */
-    chart_title_set_name(chart,        "Results of sample analysis");
-    chart_axis_set_name(chart->x_axis, "Test number");
-    chart_axis_set_name(chart->y_axis, "Sample length (mm)");
-
-    /* Set an Excel chart style. */
-    chart_set_style(chart, 13);
-
-    /* Insert the chart into the worksheet. */
-    worksheet_insert_chart(worksheet, CELL("E34"), chart);
-
-
-    return workbook_close(workbook);
+	return 0;
 }
