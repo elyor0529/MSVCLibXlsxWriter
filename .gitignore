@@ -10,3 +10,6 @@ ExampleExe/ExampleExe/X64
 .DS_Store
 *.bak
 
+/LibXlsxWriterProj/x64/Debug/LibXlsxWriter.exp
+/LibXlsxWriterProj/x64/Debug/LibXlsxWriter.ilk
+/LibXlsxWriterProj/x64/Debug/LibXlsxWriter.pdb
